@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zalo Web Advanced - Chat & Call</title>
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', Arial, sans-serif; }
+    body { margin: 0; padding: 20px; background: #eef2f5; }
+    
+    /* Login Modal */
+    #login-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
+    .auth-box { background: white; padding: 25px; border-radius: 12px; width: 340px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+    .avatar-picker { display: flex; gap: 10px; justify-content: center; margin: 10px 0; }
+    .avatar-opt { width: 45px; height: 45px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
+    .avatar-opt.selected { border-color: #0068ff; transform: scale(1.1); }
+    
+    /* Main Layout */
+    .container { display: flex; gap: 15px; max-width: 1200px; margin: 0 auto; height: 85vh; }
+    .card { background: white; border-radius: 12px; padding: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); display: flex; flex-direction: column; }
+    
+    /* User List */
+    .user-section { width: 300px; }
+    .user-item { display: flex; align-items: center; gap: 10px; padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; border-radius: 8px; }
+    .user-item:hover, .user-item.active { background: #eef5ff; }
+    .user-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+    .online { background: #28a745; }
+    .offline { background: #dc3545; }
+    
+    /* Chat Area */
+    .chat-section { flex: 1; }
+    #chat-box { flex: 1; border: 1px solid #eee; border-radius: 8px; padding: 10px; overflow-y: auto; margin-bottom: 10px; background: #fafafa; }
+    .input-row { display: flex; gap: 8px; }
+    input[type="text"], input[type="password"] { padding: 10px; border: 1px solid #ccc; border-radius: 6px; }
+    button { padding: 10px 16px; background: #0068ff; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    
+    /* Video Box */
+    .video-section { width: 320px; display: none; }
+    video { width: 100%; height: 160px; background: #111; border-radius: 8px; object-fit: cover; margin-bottom: 5px; }
+    
+    /* Incoming Call Modal */
+    #call-modal { display: none; position: fixed; top: 20px; right: 20px; background: white; border-left: 5px solid #28a745; padding: 15px 20px; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); z-index: 99; }
+  </style>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
+</head>
+<body>
+
+  <!-- Màn hình Đăng ký / Đăng nhập -->
+  <div id="login-modal">
+    <div class="auth-box">
+      <h3 style="text-align:center; margin-top:0;">🔐 Đăng Nhập / Đăng Ký</h3>
+      <input type="text" id="usernameInput" placeholder="Tên tài khoản..." style="width:100%; margin-bottom:10px;">
+      <input type="password" id="passwordInput" placeholder="Mật khẩu..." style="width:100%; margin-bottom:10px;">
+      
+      <small><b>Chọn Avatar của bé:</b></small>
+      <div class="avatar-picker">
+        <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Felix" class="avatar-opt selected" onclick="selectAvatar(this)">
+        <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Aneka" class="avatar-opt" onclick="selectAvatar(this)">
+        <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Zack" class="avatar-opt" onclick="selectAvatar(this)">
+      </div>
+
+      <button onclick="handleAuth()" style="width:100%; margin-top:10px;">Vào Ứng Dụng</button>
+    </div>
+  </div>
+
+  <!-- Thông báo cuộc gọi đến -->
+  <div id="call-modal">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <img id="caller-avatar" src="" style="width:40px; height:40px; border-radius:50%;">
+      <div>📞 <b id="caller-name">...</b> đang gọi!</div>
+    </div>
+    <div style="margin-top:10px; display:flex; gap:10px;">
+      <button style="background:#28a745;" onclick="answerCall()">Trả lời</button>
+      <button style="background:#dc3545;" onclick="rejectCall()">Từ chối</button>
+    </div>
+  </div>
+
+  <!-- Giao diện chính -->
+  <div class="container">
+    <div class="card user-section">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <img id="my-avatar-img" src="" style="width:35px; height:35px; border-radius:50%;">
+          <b id="my-name-display">...</b>
+        </div>
+        <button onclick="logout()" style="padding:4px 8px; background:#dc3545; font-size:12px;">Thoát</button>
+      </div>
+      <hr style="border:none; border-top:1px solid #eee; margin-bottom:10px;">
+      <h3>Danh sách Tài khoản</h3>
+      <div id="user-list"></div>
+    </div>
+
+    <div class="card chat-section">
+      <h3 id="chat-title">💬 Trò chuyện</h3>
+      <div id="chat-box"></div>
+      <div class="input-row">
+        <input type="text" id="messageInput" placeholder="Chọn tài khoản để nhắn..." onkeypress="if(event.key==='Enter') sendMessage()" disabled>
+        <input type="file" id="fileInput" style="display:none" onchange="sendFile()">
+        <button onclick="document.getElementById('fileInput').click()">📎</button>
+        <button onclick="sendMessage()" id="sendBtn" disabled>Gửi</button>
+      </div>
+    </div>
+
+    <div class="card video-section" id="video-card">
+      <h3>📹 Gọi Video</h3>
+      <video id="remoteVideo" autoplay playsinline></video>
+      <video id="localVideo" autoplay muted playsinline></video>
+      <button style="background:#dc3545; margin-top:10px;" onclick="endCall()">🔴 Cúp máy</button>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+    let currentUser = null;
+    let selectedAvatar = 'https://api.dicebear.com/7.x/bottts/svg?seed=Felix';
+    let currentChatTarget = null;
+    let myStream = null, peer = null, incomingCallData = null;
+
+    // 1. Tự động kiểm tra phiên đăng nhập trên cùng thiết bị
+    window.onload = () => {
+      const savedUser = localStorage.getItem('zalo_user');
+      if (savedUser) {
+        currentUser = JSON.parse(savedUser);
+        initApp();
+      }
+    };
+
+    function selectAvatar(el) {
+      document.querySelectorAll('.avatar-opt').forEach(a => a.classList.remove('selected'));
+      el.classList.add('selected');
+      selectedAvatar = el.src;
+    }
+
+    async function handleAuth() {
+      const username = document.getElementById('usernameInput').value.trim();
+      const password = document.getElementById('passwordInput').value.trim();
+
+      if (!username || !password) return alert('Bé vui lòng nhập đủ tên và mật khẩu!');
+
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, avatar: selectedAvatar })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        currentUser = data.user;
+        localStorage.setItem('zalo_user', JSON.stringify(currentUser)); // Lưu phiên đăng nhập
+        initApp();
+      } else {
+        alert(data.message);
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('zalo_user');
+      location.reload();
+    }
+
+    function initApp() {
+      document.getElementById('login-modal').style.display = 'none';
+      document.getElementById('my-name-display').innerText = currentUser.username;
+      document.getElementById('my-avatar-img').src = currentUser.avatar;
+
+      // Mở Camera
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then(stream => {
+          myStream = stream;
+          document.getElementById('localVideo').srcObject = stream;
+        }).catch(err => console.log('Chưa cấp quyền camera:', err));
+
+      socket.emit('join', currentUser.username);
+    }
+
+    // Nhận danh sách Tài Khoản (Online & Offline)
+    socket.on('user_list', (users) => {
+      const listDiv = document.getElementById('user-list');
+      listDiv.innerHTML = '';
+
+      users.forEach(u => {
+        if (u.username !== currentUser.username) {
+          const div = document.createElement('div');
+          div.className = 'user-item' + (currentChatTarget && currentChatTarget.username === u.username ? ' active' : '');
+          div.onclick = () => selectUserToChat(u);
+
+          const statusClass = u.isOnline ? 'online' : 'offline';
+          const statusText = u.isOnline ? 'Online' : 'Offline';
+
+          div.innerHTML = `
+            <img src="${u.avatar}" class="user-avatar">
+            <div style="flex:1;">
+              <div><b>${u.username}</b></div>
+              <small><span class="status-dot ${statusClass}"></span>${statusText}</small>
+            </div>
+            ${u.isOnline ? `<button style="padding:4px 8px; background:#28a745;" onclick="event.stopPropagation(); startCall('${u.socketId}', '${u.username}', '${u.avatar}')">📞</button>` : ''}
+          `;
+          listDiv.appendChild(div);
+        }
+      });
+    });
+
+    function selectUserToChat(user) {
+      currentChatTarget = user;
+      document.getElementById('chat-title').innerText = `💬 Trò chuyện với: ${user.username} (${user.isOnline ? 'Online' : 'Offline'})`;
+      document.getElementById('messageInput').disabled = false;
+      document.getElementById('sendBtn').disabled = false;
+      document.getElementById('messageInput').placeholder = `Nhập tin nhắn cho ${user.username}...`;
+      
+      // Cập nhật lại giao diện danh sách người dùng chọn
+      socket.emit('request_user_list');
+    }
+
+    // Nhắn tin
+    function sendMessage() {
+      const input = document.getElementById('messageInput');
+      if (!input.value || !currentChatTarget) return;
+
+      socket.emit('send_message', {
+        sender: currentUser.username,
+        receiver: currentChatTarget.username,
+        text: input.value,
+        type: 'text'
+      });
+      input.value = '';
+    }
+
+    function sendFile() {
+      const file = document.getElementById('fileInput').files[0];
+      if (!file || !currentChatTarget) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        socket.emit('send_message', {
+          sender: currentUser.username,
+          receiver: currentChatTarget.username,
+          url: e.target.result,
+          fileName: file.name,
+          type: 'file'
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+
+    socket.on('receive_message', (data) => {
+      // Chỉ hiển thị tin nhắn nếu thuộc về hội thoại đang chọn
+      if (currentChatTarget && (data.sender === currentChatTarget.username || data.sender === currentUser.username)) {
+        appendMessage(data);
+      }
+    });
+
+    // Nhận tin nhắn Offline chờ sẵn khi mới đăng nhập lại
+    socket.on('pending_messages', (messages) => {
+      alert(`Bé có ${messages.length} tin nhắn mới gửi lúc offline!`);
+      messages.forEach(msg => appendMessage(msg));
+    });
+
+    function appendMessage(data) {
+      const box = document.getElementById('chat-box');
+      const p = document.createElement('p');
+      if (data.type === 'file') {
+        p.innerHTML = `<b>${data.sender}:</b> <a href="${data.url}" download="${data.fileName}" target="_blank">📄 ${data.fileName}</a>`;
+      } else {
+        p.innerHTML = `<b>${data.sender}:</b> ${data.text}`;
+      }
+      box.appendChild(p);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    // Cuộc gọi Video
+    function startCall(targetSocketId, targetName, targetAvatar) {
+      document.getElementById('video-card').style.display = 'flex';
+      peer = new SimplePeer({ initiator: true, trickle: false, stream: myStream });
+
+      peer.on('signal', data => {
+        socket.emit('call_user', {
+          toSocketId: targetSocketId,
+          signalData: data,
+          fromName: currentUser.username,
+          fromAvatar: currentUser.avatar
+        });
+      });
+
+      peer.on('stream', stream => {
+        document.getElementById('remoteVideo').srcObject = stream;
+      });
+    }
+
+    socket.on('incoming_call', (data) => {
+      incomingCallData = data;
+      document.getElementById('caller-name').innerText = data.fromName;
+      document.getElementById('caller-avatar').src = data.fromAvatar;
+      document.getElementById('call-modal').style.display = 'block';
+    });
+
+    function answerCall() {
+      document.getElementById('call-modal').style.display = 'none';
+      document.getElementById('video-card').style.display = 'flex';
+
+      peer = new SimplePeer({ initiator: false, trickle: false, stream: myStream });
+
+      peer.on('signal', data => {
+        socket.emit('accept_call', { toSocketId: incomingCallData.fromSocketId, signal: data });
+      });
+
+      peer.on('stream', stream => {
+        document.getElementById('remoteVideo').srcObject = stream;
+      });
+
+      peer.signal(incomingCallData.signal);
+    }
+
+    socket.on('call_accepted', (signal) => peer.signal(signal));
+
+    function rejectCall() {
+      document.getElementById('call-modal').style.display = 'none';
+      socket.emit('end_call', { toSocketId: incomingCallData.fromSocketId });
+    }
+
+    function endCall() {
+      document.getElementById('video-card').style.display = 'none';
+      if (peer) peer.destroy();
+      peer = null;
+    }
+
+    socket.on('call_ended', () => {
+      document.getElementById('video-card').style.display = 'none';
+      alert('Cuộc gọi đã kết thúc.');
+    });
+  </script>
+</body>
+</html>
