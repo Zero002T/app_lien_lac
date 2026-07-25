@@ -1,137 +1,90 @@
 const express = require('express');
-const app = express();
-const http = require('http').createServer(app);
-const io = require('socket.io')(http);
+const http = require('http');
+const { Server } = require('socket.io');
 const fs = require('fs');
 const path = require('path');
 
-app.use(express.static('public'));
-app.use(express.json({ limit: '10mb' }));
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
 const DB_FILE = path.join(__dirname, 'database.json');
 
-// Đọc cơ sở dữ liệu từ file
-function loadData() {
-  if (!fs.existsSync(DB_FILE)) {
-    fs.writeFileSync(DB_FILE, JSON.stringify({ users: {}, offlineMessages: {} }));
+// Hàm đọc Database
+function readDB() {
+  if (!fs.existsSync(DB_FILE)) return { users: [], messages: [] };
+  try {
+    return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+  } catch (e) {
+    return { users: [], messages: [] };
   }
-  return JSON.parse(fs.readFileSync(DB_FILE));
 }
 
-// Lưu cơ sở dữ liệu vào file
-function saveData(data) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
-}
+// Lưu các socket đang online: { socketId: username }
+const onlineUsers = new Map();
 
-// Lấy danh sách tài khoản (có trạng thái online/offline)
-function getUsersList(activeSocketUsers) {
-  const db = loadData();
-  const list = [];
-  const onlineUsernames = Object.values(activeSocketUsers).map(u => u.username);
-
-  for (let username in db.users) {
-    list.push({
-      username: username,
-      avatar: db.users[username].avatar,
-      isOnline: onlineUsernames.includes(username),
-      socketId: Object.keys(activeSocketUsers).find(id => activeSocketUsers[id].username === username) || null
-    });
+// API Đăng ký
+app.post('/api/register', (req, res) => {
+  const { username, password } = req.body;
+  const db = readDB();
+  if (db.users.find(u => u.username === username)) {
+    return res.status(400).json({ message: 'Tài khoản đã tồn tại!' });
   }
-  return list;
-}
-
-let activeUsers = {}; // { socketId: { username } }
-
-// API Đăng ký / Đăng nhập
-app.post('/api/auth', (req, res) => {
-  const { username, password, avatar } = req.body;
-  if (!username || !password) return res.json({ success: false, message: 'Thiếu tên hoặc mật khẩu!' });
-
-  const db = loadData();
-
-  if (db.users[username]) {
-    // Đăng nhập
-    if (db.users[username].password !== password) {
-      return res.json({ success: false, message: 'Mật khẩu không chính xác!' });
-    }
-    // Cập nhật avatar nếu người dùng chọn avatar mới
-    if (avatar) db.users[username].avatar = avatar;
-    saveData(db);
-    return res.json({ success: true, user: { username, avatar: db.users[username].avatar } });
-  } else {
-    // Đăng ký tài khoản mới
-    const defaultAvatar = avatar || 'https://api.dicebear.com/7.x/bottts/svg?seed=' + username;
-    db.users[username] = { password, avatar: defaultAvatar };
-    saveData(db);
-    return res.json({ success: true, user: { username, avatar: defaultAvatar } });
-  }
+  db.users.push({ username, password });
+  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+  res.json({ message: 'Đăng ký thành công!' });
 });
 
-// Real-time qua Socket.io
+// API Đăng nhập
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+  const db = readDB();
+  const user = db.users.find(u => u.username === username && u.password === password);
+  if (!user) return res.status(400).json({ message: 'Sai tài khoản hoặc mật khẩu!' });
+  res.json({ message: 'Đăng nhập thành công!', username });
+});
+
+// Xử lý Realtime với Socket.io
 io.on('connection', (socket) => {
-  
-  socket.on('join', (username) => {
-    activeUsers[socket.id] = { username };
-    
-    // Phát tin nhắn offline chưa đọc cho người dùng
-    const db = loadData();
-    if (db.offlineMessages[username] && db.offlineMessages[username].length > 0) {
-      socket.emit('pending_messages', db.offlineMessages[username]);
-      db.offlineMessages[username] = []; // Xoá tin nhắn offline sau khi đã gửi
-      saveData(db);
-    }
-
-    io.emit('user_list', getUsersList(activeUsers));
+  // Khi user báo danh tên đăng nhập
+  socket.on('user_connected', (username) => {
+    onlineUsers.set(socket.id, username);
+    broadcastUserList();
   });
 
-  // Nhắn tin (Online & Offline)
+  // Khi có tin nhắn mới
   socket.on('send_message', (data) => {
-    // data: { sender, receiver, text, fileUrl, fileName, isFile }
-    const onlineReceiverSocketId = Object.keys(activeUsers).find(id => activeUsers[id].username === data.receiver);
+    // data = { sender, receiver, text }
+    const db = readDB();
+    db.messages.push(data);
+    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
 
-    if (onlineReceiverSocketId) {
-      // Người nhận đang Online -> Gửi trực tiếp
-      io.to(onlineReceiverSocketId).emit('receive_message', data);
-    } else {
-      // Người nhận đang Offline -> Lưu vào danh sách chờ
-      const db = loadData();
-      if (!db.offlineMessages[data.receiver]) {
-        db.offlineMessages[data.receiver] = [];
-      }
-      db.offlineMessages[data.receiver].push(data);
-      saveData(db);
-    }
-
-    // Gửi lại tin nhắn về cho chính người gửi để hiển thị trên khung chat của họ
-    socket.emit('receive_message', data);
+    // Gửi tin nhắn cho tất cả các máy
+    io.emit('receive_message', data);
   });
 
-  // Gọi Video
-  socket.on('call_user', (data) => {
-    // data: { toSocketId, signalData, fromName, fromAvatar }
-    io.to(data.toSocketId).emit('incoming_call', {
-      signal: data.signalData,
-      fromSocketId: socket.id,
-      fromName: data.fromName,
-      fromAvatar: data.fromAvatar
-    });
-  });
-
-  socket.on('accept_call', (data) => {
-    io.to(data.toSocketId).emit('call_accepted', data.signal);
-  });
-
-  socket.on('end_call', (data) => {
-    io.to(data.toSocketId).emit('call_ended');
-  });
-
+  // Khi mất kết nối
   socket.on('disconnect', () => {
-    delete activeUsers[socket.id];
-    io.emit('user_list', getUsersList(activeUsers));
+    onlineUsers.delete(socket.id);
+    broadcastUserList();
   });
 });
 
-const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
-  console.log(`Server dang chay tai: http://localhost:${PORT}`);
-});
+// Hàm gửi danh sách TẤT CẢ tài khoản (Kèm trạng thái Online/Offline)
+function broadcastUserList() {
+  const db = readDB();
+  const activeUsernames = Array.from(onlineUsers.values());
+
+  const fullUserList = db.users.map(u => ({
+    username: u.username,
+    isOnline: activeUsernames.includes(u.username)
+  }));
+
+  io.emit('update_user_list', fullUserList);
+}
+
+const PORT = process.env.PORT || 10000;
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
