@@ -15,7 +15,11 @@ const DB_FILE = path.join(__dirname, 'database.json');
 
 // Hàm đọc Database
 function readDB() {
-  if (!fs.existsSync(DB_FILE)) return { users: [], messages: [] };
+  if (!fs.existsSync(DB_FILE)) {
+    const initialData = { users: [], messages: [] };
+    fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2));
+    return initialData;
+  }
   try {
     return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
   } catch (e) {
@@ -23,57 +27,69 @@ function readDB() {
   }
 }
 
-// Lưu các socket đang online: { socketId: username }
 const onlineUsers = new Map();
 
-// API Đăng ký
+// API ĐĂNG KÝ (Loại bỏ khoảng trắng dư thừa)
 app.post('/api/register', (req, res) => {
-  const { username, password } = req.body;
-  const db = readDB();
-  if (db.users.find(u => u.username === username)) {
-    return res.status(400).json({ message: 'Tài khoản đã tồn tại!' });
+  const username = (req.body.username || '').trim();
+  const password = (req.body.password || '').trim();
+
+  if (!username || !password) {
+    return res.status(400).json({ message: 'Tên và mật khẩu không được để trống!' });
   }
+
+  const db = readDB();
+  // Kiểm tra tài khoản đã tồn tại (không phân biệt hoa thường)
+  const userExists = db.users.find(u => u.username.toLowerCase() === username.toLowerCase());
+  
+  if (userExists) {
+    return res.status(400).json({ message: 'Tài khoản này đã tồn tại!' });
+  }
+
   db.users.push({ username, password });
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
   res.json({ message: 'Đăng ký thành công!' });
 });
 
-// API Đăng nhập
+// API ĐĂNG NHẬP (Chuẩn hóa so sánh)
 app.post('/api/login', (req, res) => {
-  const { username, password } = req.body;
+  const username = (req.body.username || '').trim();
+  const password = (req.body.password || '').trim();
+
   const db = readDB();
-  const user = db.users.find(u => u.username === username && u.password === password);
-  if (!user) return res.status(400).json({ message: 'Sai tài khoản hoặc mật khẩu!' });
-  res.json({ message: 'Đăng nhập thành công!', username });
+  
+  // Tìm user chính xác tên và mật khẩu
+  const user = db.users.find(u => 
+    u.username.toLowerCase() === username.toLowerCase() && u.password === password
+  );
+
+  if (!user) {
+    return res.status(400).json({ message: 'Tài khoản hoặc mật khẩu không chính xác!' });
+  }
+
+  res.json({ message: 'Đăng nhập thành công!', username: user.username });
 });
 
-// Xử lý Realtime với Socket.io
+// Realtime Socket.io
 io.on('connection', (socket) => {
-  // Khi user báo danh tên đăng nhập
   socket.on('user_connected', (username) => {
     onlineUsers.set(socket.id, username);
     broadcastUserList();
   });
 
-  // Khi có tin nhắn mới
   socket.on('send_message', (data) => {
-    // data = { sender, receiver, text }
     const db = readDB();
     db.messages.push(data);
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
-
-    // Gửi tin nhắn cho tất cả các máy
     io.emit('receive_message', data);
   });
 
-  // Khi mất kết nối
   socket.on('disconnect', () => {
     onlineUsers.delete(socket.id);
     broadcastUserList();
   });
 });
 
-// Hàm gửi danh sách TẤT CẢ tài khoản (Kèm trạng thái Online/Offline)
 function broadcastUserList() {
   const db = readDB();
   const activeUsernames = Array.from(onlineUsers.values());
