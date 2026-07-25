@@ -3,18 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <title>App Liên Lạc Rực Rỡ</title>
-  <!-- Nhập font chữ Google Font cho nét chữ tròn, hiện đại -->
   <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: 'Lexend', sans-serif;
-    }
-
-    /* Nền Gradient mượt mà rực rỡ */
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Lexend', sans-serif; }
+    
     body {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #fb7ba2 100%);
       height: 100vh;
@@ -23,225 +16,113 @@
       justify-content: center;
     }
 
-    /* Khung Chat hiệu ứng Kính Mờ (Glassmorphism) */
+    /* Màn hình Đăng nhập / Đăng ký */
+    .auth-card {
+      width: 400px;
+      padding: 35px 30px;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(16px);
+      border-radius: 24px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      text-align: center;
+    }
+
+    .auth-card h2 { color: #4a154b; margin-bottom: 20px; font-weight: 700; }
+    
+    .input-group { margin-bottom: 15px; }
+    .input-group input {
+      width: 100%;
+      padding: 12px 18px;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      outline: none;
+      font-size: 14px;
+      transition: all 0.3s;
+    }
+    .input-group input:focus { border-color: #764ba2; box-shadow: 0 0 10px rgba(118, 75, 162, 0.2); }
+
+    .btn-auth {
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, #7f53ac 0%, #647de8 100%);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: transform 0.2s;
+    }
+    .btn-auth:hover { transform: scale(1.02); }
+
+    .toggle-auth { margin-top: 15px; font-size: 13px; color: #666; cursor: pointer; }
+    .toggle-auth b { color: #7f53ac; }
+
+    /* Màn hình Chat (Ẩn mặc định) */
     .chat-container {
       width: 950px;
       height: 650px;
       background: rgba(255, 255, 255, 0.85);
       backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      display: flex;
+      display: none; /* Hiện lên khi đăng nhập xong */
       border-radius: 24px;
       box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
       border: 1px solid rgba(255, 255, 255, 0.5);
       overflow: hidden;
     }
 
-    /* Cột bên trái: Danh sách tài khoản */
-    .sidebar {
-      width: 320px;
-      background: rgba(255, 255, 255, 0.6);
-      border-right: 1px solid rgba(230, 230, 250, 0.8);
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-    }
+    /* Sidebar & Main Chat */
+    .sidebar { width: 320px; background: rgba(255, 255, 255, 0.6); border-right: 1px solid rgba(230,230,250,0.8); padding: 20px; display: flex; flex-direction: column; }
+    .sidebar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+    .btn-logout { background: #ff758c; color: #fff; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; }
 
-    .sidebar h3 {
-      color: #4a154b;
-      font-size: 18px;
-      font-weight: 700;
-      margin-bottom: 15px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+    .user-item { padding: 12px 16px; margin-bottom: 10px; border-radius: 16px; background: #fff; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: all 0.3s; }
+    .user-item:hover { transform: translateY(-2px); border-color: #a18cd1; }
+    .user-item.active { background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%); }
+    .user-item.active span { color: #fff !important; }
 
-    /* Thẻ tài khoản cá nhân */
-    .user-item {
-      padding: 12px 16px;
-      margin-bottom: 10px;
-      border-radius: 16px;
-      background: #ffffff;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      cursor: pointer;
-      border: 2px solid transparent;
-      transition: all 0.3s ease;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
-    }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .online { background: #00f2fe; box-shadow: 0 0 10px #00f2fe; }
+    .offline { background: #bdc3c7; }
 
-    .user-item:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 15px rgba(118, 75, 162, 0.15);
-      border-color: #a18cd1;
-    }
+    .main-chat { flex: 1; display: flex; flex-direction: column; background: rgba(248, 249, 253, 0.7); }
+    .chat-header { padding: 18px 24px; background: rgba(255, 255, 255, 0.8); border-bottom: 1px solid rgba(230,230,250,0.8); font-weight: 700; }
+    .messages-box { flex: 1; padding: 20px 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
 
-    .user-item.active {
-      background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
-      color: #fff;
-    }
+    .message { max-width: 65%; padding: 12px 18px; border-radius: 20px; font-size: 14px; line-height: 1.5; word-wrap: break-word; }
+    .message.received { align-self: flex-start; background: #fff; color: #2c3e50; border-bottom-left-radius: 4px; box-shadow: 0 4px 15px rgba(0,0,0,0.04); }
+    .message.sent { align-self: flex-end; background: linear-gradient(135deg, #7f53ac 0%, #647de8 100%); color: #fff; border-bottom-right-radius: 4px; box-shadow: 0 4px 15px rgba(100,125,232,0.3); }
 
-    .user-item.active span {
-      color: #fff !important;
-    }
-
-    /* Chấm trạng thái Online / Offline nhấp nháy */
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      font-weight: 500;
-    }
-
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      display: inline-block;
-    }
-
-    .online {
-      background: #00f2fe;
-      box-shadow: 0 0 10px #00f2fe;
-      animation: pulse 1.8s infinite;
-    }
-
-    .offline {
-      background: #bdc3c7;
-    }
-
-    @keyframes pulse {
-      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 242, 254, 0.7); }
-      70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(0, 242, 254, 0); }
-      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 242, 254, 0); }
-    }
-
-    /* Cột bên phải: Vùng Chat chính */
-    .main-chat {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      background: rgba(248, 249, 253, 0.7);
-    }
-
-    .chat-header {
-      padding: 18px 24px;
-      background: rgba(255, 255, 255, 0.8);
-      border-bottom: 1px solid rgba(230, 230, 250, 0.8);
-      font-weight: 700;
-      color: #333;
-      font-size: 16px;
-      backdrop-filter: blur(5px);
-    }
-
-    /* Khung hiển thị tin nhắn */
-    .messages-box {
-      flex: 1;
-      padding: 20px 24px;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    /* Phong cách Bong Bóng Tin Nhắn */
-    .message {
-      max-width: 65%;
-      padding: 12px 18px;
-      border-radius: 20px;
-      font-size: 14px;
-      line-height: 1.5;
-      word-wrap: break-word;
-      animation: fadeIn 0.25s ease-in-out;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    /* Tin nhắn người khác gửi (Bên trái - Pastel Trắng) */
-    .message.received {
-      align-self: flex-start;
-      background: #ffffff;
-      color: #2c3e50;
-      border-bottom-left-radius: 4px;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
-    }
-
-    /* Tin nhắn bé gửi (Bên phải - Gradient Tím Hồng rực rỡ) */
-    .message.sent {
-      align-self: flex-end;
-      background: linear-gradient(135deg, #7f53ac 0%, #647de8 100%);
-      color: #ffffff;
-      border-bottom-right-radius: 4px;
-      box-shadow: 0 4px 15px rgba(100, 125, 232, 0.3);
-    }
-
-    .message .sender-name {
-      font-size: 11px;
-      font-weight: 600;
-      margin-bottom: 4px;
-      color: #ff758c;
-    }
-
-    /* Khung nhập tin nhắn */
-    .input-box {
-      padding: 16px 20px;
-      background: rgba(255, 255, 255, 0.9);
-      display: flex;
-      gap: 12px;
-      border-top: 1px solid rgba(230, 230, 250, 0.8);
-    }
-
-    .input-box input {
-      flex: 1;
-      padding: 12px 20px;
-      border: 2px solid #e2e8f0;
-      border-radius: 30px;
-      outline: none;
-      font-size: 14px;
-      transition: all 0.3s;
-      background: #f8fafc;
-    }
-
-    .input-box input:focus {
-      border-color: #764ba2;
-      background: #fff;
-      box-shadow: 0 0 10px rgba(118, 75, 162, 0.2);
-    }
-
-    .input-box button {
-      padding: 12px 28px;
-      background: linear-gradient(135deg, #ff758c 0%, #ff7eb3 100%);
-      color: #fff;
-      border: none;
-      border-radius: 30px;
-      cursor: pointer;
-      font-weight: 600;
-      font-size: 14px;
-      box-shadow: 0 4px 12px rgba(255, 117, 140, 0.4);
-      transition: all 0.3s ease;
-    }
-
-    .input-box button:hover {
-      transform: scale(1.05);
-      box-shadow: 0 6px 18px rgba(255, 117, 140, 0.6);
-    }
-
-    /* Thanh cuộn tin nhắn tùy chỉnh siêu mượt */
-    .messages-box::-webkit-scrollbar { width: 6px; }
-    .messages-box::-webkit-scrollbar-thumb { background: rgba(189, 195, 199, 0.5); border-radius: 10px; }
+    .input-box { padding: 16px 20px; background: rgba(255, 255, 255, 0.9); display: flex; gap: 12px; border-top: 1px solid rgba(230,230,250,0.8); }
+    .input-box input { flex: 1; padding: 12px 20px; border: 2px solid #e2e8f0; border-radius: 30px; outline: none; }
+    .input-box button { padding: 12px 28px; background: linear-gradient(135deg, #ff758c 0%, #ff7eb3 100%); color: #fff; border: none; border-radius: 30px; cursor: pointer; font-weight: 600; }
   </style>
 </head>
 <body>
 
-  <div class="chat-container">
+  <!-- 1. Form Đăng nhập / Đăng ký -->
+  <div class="auth-card" id="authCard">
+    <h2 id="authTitle">✨ Đăng Nhập</h2>
+    <div class="input-group">
+      <input type="text" id="usernameInput" placeholder="Tên tài khoản..." />
+    </div>
+    <div class="input-group">
+      <input type="password" id="passwordInput" placeholder="Mật khẩu..." />
+    </div>
+    <button class="btn-auth" onclick="handleAuth()" id="authBtn">Đăng Nhập</button>
+    <div class="toggle-auth" onclick="toggleAuthMode()">
+      <span id="toggleText">Chưa có tài khoản? <b>Đăng ký ngay</b></span>
+    </div>
+  </div>
+
+  <!-- 2. Khung Chat chính -->
+  <div class="chat-container" id="chatContainer">
     <div class="sidebar">
-      <h3>✨ Tài khoản</h3>
+      <div class="sidebar-header">
+        <h3 id="myAccountTitle">👤 Hieu</h3>
+        <button class="btn-logout" onclick="logout()">Thoát</button>
+      </div>
       <div id="userList"></div>
     </div>
 
@@ -249,7 +130,7 @@
       <div class="chat-header" id="chatHeader">💬 Chọn tài khoản để nhắn tin</div>
       <div class="messages-box" id="messagesBox"></div>
       <div class="input-box">
-        <input type="text" id="msgInput" placeholder="Nhập tin nhắn rực rỡ tại đây..." onkeypress="if(event.key === 'Enter') sendMessage()" />
+        <input type="text" id="msgInput" placeholder="Nhập tin nhắn rực rỡ..." onkeypress="if(event.key === 'Enter') sendMessage()" />
         <button onclick="sendMessage()">Gửi ✨</button>
       </div>
     </div>
@@ -258,10 +139,62 @@
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
-    const currentUser = localStorage.getItem('username') || 'Hieu';
+    let isLoginMode = true;
+    let currentUser = localStorage.getItem('username');
     let selectedUser = '';
 
-    socket.emit('user_connected', currentUser);
+    // Tự động vào chat nếu đã đăng nhập từ trước
+    if (currentUser) {
+      showChatScreen();
+    }
+
+    function toggleAuthMode() {
+      isLoginMode = !isLoginMode;
+      document.getElementById('authTitle').innerText = isLoginMode ? '✨ Đăng Nhập' : '✨ Đăng Ký';
+      document.getElementById('authBtn').innerText = isLoginMode ? 'Đăng Nhập' : 'Đăng Ký';
+      document.getElementById('toggleText').innerHTML = isLoginMode 
+        ? 'Chưa có tài khoản? <b>Đăng ký ngay</b>' 
+        : 'Đã có tài khoản? <b>Đăng nhập</b>';
+    }
+
+    async function handleAuth() {
+      const username = document.getElementById('usernameInput').value.trim();
+      const password = document.getElementById('passwordInput').value.trim();
+
+      if (!username || !password) return alert('Vui lòng điền đủ thông tin!');
+
+      const endpoint = isLoginMode ? '/api/login' : '/api/register';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+
+      const data = await res.json();
+      if (!res.ok) return alert(data.message);
+
+      if (isLoginMode) {
+        currentUser = username;
+        localStorage.setItem('username', currentUser);
+        showChatScreen();
+      } else {
+        alert('Đăng ký thành công! Hãy đăng nhập ngay.');
+        toggleAuthMode();
+      }
+    }
+
+    function showChatScreen() {
+      document.getElementById('authCard').style.display = 'none';
+      document.getElementById('chatContainer').style.display = 'flex';
+      document.getElementById('myAccountTitle').innerText = `👤 ${currentUser}`;
+      
+      socket.emit('user_connected', currentUser);
+    }
+
+    function logout() {
+      localStorage.removeItem('username');
+      location.reload();
+    }
 
     socket.on('update_user_list', (users) => {
       const userListEl = document.getElementById('userList');
@@ -279,9 +212,8 @@
 
         div.innerHTML = `
           <span><b>${u.username}</b></span>
-          <span class="status-badge">
-            <span class="status-dot ${statusClass}"></span>
-            <span style="color: ${u.isOnline ? '#00b894' : '#a0aec0'};">${statusText}</span>
+          <span style="font-size: 12px; color: ${u.isOnline ? '#00b894' : '#a0aec0'};">
+            <span class="status-dot ${statusClass}"></span> ${statusText}
           </span>
         `;
         userListEl.appendChild(div);
@@ -302,7 +234,7 @@
       msgDiv.className = `message ${isMyMessage ? 'sent' : 'received'}`;
 
       msgDiv.innerHTML = `
-        ${!isMyMessage ? `<div class="sender-name">~ ${data.sender}</div>` : ''}
+        ${!isMyMessage ? `<div style="font-size: 11px; font-weight:600; color:#ff758c; margin-bottom:3px;">~ ${data.sender}</div>` : ''}
         <div>${data.text}</div>
       `;
 
@@ -326,4 +258,3 @@
   </script>
 </body>
 </html>
-
